@@ -111,6 +111,12 @@ btnProduto.addEventListener('click', () => {
   fetchMarcas();
   fetchTipos();
   
+  // Clear model checkboxes when opening modal
+  const modelosContainer = document.getElementById('popupProdutoModalModelosContainer');
+  if (modelosContainer) {
+    modelosContainer.innerHTML = '';
+  }
+  
   descricaoProduto.value = '';
   provl.value = '';
   produtoModal.show();
