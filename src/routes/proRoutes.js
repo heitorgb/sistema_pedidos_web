@@ -54,6 +54,27 @@ router.put(
   proController.gravarEstoqueProduto
 );
 
+// Product-Model relationship routes
+router.get(
+  "/proModelos/:id",
+  proController.listarProdutoModelos
+);
+router.post(
+  "/proModelos/:id",
+  autenticarToken,
+  proController.inserirProdutoModelos
+);
+router.put(
+  "/proModelos/:id",
+  autenticarToken,
+  proController.alterarProdutoModelos
+);
+router.delete(
+  "/proModelos/:id",
+  autenticarToken,
+  proController.deletarProdutoModelos
+);
+
 // V2 Routes com models
 router.get(
   "/v2/proComEstoque",

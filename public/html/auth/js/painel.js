@@ -510,8 +510,22 @@ function editarProduto(codigo) {
     fetch(`${BASE_URL}/pro/painel/${codigo}`).then((r) => r.json()),
     fetch(`${BASE_URL}/procores`).then((r) => r.json()),
     fetch(`${BASE_URL}/proCoresDisponiveis/${codigo}`).then((r) => r.json()),
+    fetch(`${BASE_URL}/proModelos/${codigo}`).then((r) => r.json()),
   ])
-    .then(([produto, coresDisponiveis, coresProduto]) => {
+    .then(async ([produto, coresDisponiveis, coresProduto, modelosProduto]) => {
+      // Fetch available models for the product's marca
+      const promarcascod = produto[0].promarcascod;
+      let modelosDisponiveis = [];
+      if (promarcascod) {
+        try {
+          const modelosResponse = await fetch(`${BASE_URL}/modelo/${promarcascod}`);
+          if (modelosResponse.ok) {
+            modelosDisponiveis = await modelosResponse.json();
+          }
+        } catch (error) {
+          console.error('Erro ao buscar modelos:', error);
+        }
+      }
       // Cria o popup
       let popup = document.createElement("div");
       popup.id = "popupEditarProduto";
@@ -568,6 +582,25 @@ function editarProduto(codigo) {
           )
           .join("")}
             </div>
+            <div class="mb-3" id="editarProdutoModelos">
+              <label>Selecione o(s) modelo(s):</label><br>
+              ${modelosDisponiveis
+          .map(
+            (m) => `
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="promodelo" value="${m.modcod
+              }"
+                  id="editar_modelo_${m.modcod}" 
+                  ${modelosProduto.some((mp) => mp.modcod == m.modcod)
+                ? "checked"
+                : ""
+              }>
+                <label class="form-check-label" for="editar_modelo_${m.modcod}">${m.moddes
+              }</label>
+              </div>`
+          )
+          .join("")}
+            </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;">
               <button type="button" class="btn btn-secondary" id="cancelarEditarProduto">Cancelar</button>
               <button type="submit" class="btn btn-primary">Salvar</button>
@@ -597,6 +630,19 @@ function editarProduto(codigo) {
         const anteriores = coresProduto
           .filter((c) => c.corcod != null)
           .map((c) => String(c.corcod));
+        
+        // Handle models
+        const modeloCheckboxes = popup.querySelectorAll(
+          '#editarProdutoModelos input[type="checkbox"]'
+        );
+        const modelosSelecionados = Array.from(modeloCheckboxes)
+          .filter((cb) => cb.checked)
+          .map((cb) => parseInt(cb.value));
+        
+        if (modelosSelecionados.length === 0) {
+          alert('Por favor, selecione pelo menos um modelo.');
+          return;
+        }
 
         try {
           const res = await fetch(`${BASE_URL}/pro/${codigo}`, {
@@ -629,6 +675,13 @@ function editarProduto(codigo) {
               );
             }
           }
+          
+          // Update models using PUT to replace all
+          await fetch(`${BASE_URL}/proModelos/${codigo}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ modcods: modelosSelecionados }),
+          });
 
           const msg = document.createElement("div");
           msg.textContent = "Produto atualizado com sucesso!";

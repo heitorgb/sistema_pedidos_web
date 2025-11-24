@@ -45,7 +45,9 @@ exports.listarProdutosPainelId = async (req, res) => {
       `select         
        procod, 
        case when prodes is null then '' else prodes end as prodes,
-       case when provl is null then 0 else provl end as provl from pro where procod = $1`,
+       case when provl is null then 0 else provl end as provl,
+       promarcascod
+       from pro where procod = $1`,
       [req.params.id]
     );
     res.status(200).json(result.rows);
@@ -71,16 +73,43 @@ exports.listarProdutoCarrinho = async (req, res) => {
 };
 
 exports.inserirProduto = async (req, res) => {
-  const { prodes, promarcascod, promodcod, protipocod, provl } = req.body;
+  const { prodes, promarcascod, promodcod, protipocod, provl, promodcods } = req.body;
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+    
+    // Insert product
+    const result = await client.query(
       `insert into pro (prodes,promarcascod,promodcod,protipocod,provl) values ($1,$2,$3,$4,$5) RETURNING *`,
       [prodes, promarcascod, promodcod, protipocod, provl]
     );
+    
+    const procod = result.rows[0].procod;
+    
+    // Insert model relationships if promodcods array is provided
+    if (promodcods && Array.isArray(promodcods) && promodcods.length > 0) {
+      for (const modcod of promodcods) {
+        await client.query(
+          `INSERT INTO pro_modelo (procod, modcod) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [procod, modcod]
+        );
+      }
+    } else if (promodcod) {
+      // Fallback: if single promodcod provided, also insert into pro_modelo for consistency
+      await client.query(
+        `INSERT INTO pro_modelo (procod, modcod) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [procod, promodcod]
+      );
+    }
+    
+    await client.query('COMMIT');
     res.status(200).json(result.rows);
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error(error);
     res.status(500).json({ error: "Erro ao inserir produto" });
+  } finally {
+    client.release();
   }
 };
 
@@ -305,5 +334,118 @@ exports.gravarEstoqueProduto = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao atualizar estoque" });
+  }
+};
+
+// Product-Model relationship management
+exports.listarProdutoModelos = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT pm.procod, pm.modcod, m.moddes 
+       FROM pro_modelo pm
+       JOIN modelo m ON m.modcod = pm.modcod
+       WHERE pm.procod = $1
+       ORDER BY m.moddes`,
+      [id]
+    );
+    res.status(200).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar modelos do produto" });
+  }
+};
+
+exports.inserirProdutoModelos = async (req, res) => {
+  const { id } = req.params;
+  const { modcods } = req.body;
+  
+  if (!modcods || !Array.isArray(modcods) || modcods.length === 0) {
+    return res.status(400).json({ error: "modcods deve ser um array não vazio" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    for (const modcod of modcods) {
+      await client.query(
+        `INSERT INTO pro_modelo (procod, modcod) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [id, modcod]
+      );
+    }
+    
+    await client.query('COMMIT');
+    res.status(200).json({ message: "Modelos vinculados com sucesso" });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(error);
+    res.status(500).json({ error: "Erro ao inserir modelos do produto" });
+  } finally {
+    client.release();
+  }
+};
+
+exports.alterarProdutoModelos = async (req, res) => {
+  const { id } = req.params;
+  const { modcods } = req.body;
+  
+  if (!modcods || !Array.isArray(modcods)) {
+    return res.status(400).json({ error: "modcods deve ser um array" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Remove all existing model links for this product
+    await client.query(
+      `DELETE FROM pro_modelo WHERE procod = $1`,
+      [id]
+    );
+    
+    // Insert new model links
+    if (modcods.length > 0) {
+      for (const modcod of modcods) {
+        await client.query(
+          `INSERT INTO pro_modelo (procod, modcod) VALUES ($1, $2)`,
+          [id, modcod]
+        );
+      }
+    }
+    
+    await client.query('COMMIT');
+    res.status(200).json({ message: "Modelos atualizados com sucesso" });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(error);
+    res.status(500).json({ error: "Erro ao atualizar modelos do produto" });
+  } finally {
+    client.release();
+  }
+};
+
+exports.deletarProdutoModelos = async (req, res) => {
+  const { id } = req.params;
+  const { modcod } = req.query;
+  
+  if (!modcod) {
+    return res.status(400).json({ error: "modcod é obrigatório" });
+  }
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM pro_modelo WHERE procod = $1 AND modcod = $2 RETURNING *`,
+      [id, modcod]
+    );
+    
+    if (result.rowCount > 0) {
+      res.status(200).json({ message: "Modelo desvinculado com sucesso" });
+    } else {
+      res.status(404).json({ error: "Vínculo não encontrado" });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao remover modelo do produto" });
   }
 };
