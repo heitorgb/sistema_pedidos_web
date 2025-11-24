@@ -30,14 +30,22 @@ btnProduto.addEventListener('click', () => {
       const response = await fetch(`${BASE_URL}/modelo/${marcascod}`);
       if (!response.ok) throw new Error('Erro ao buscar modelos');
       const modelos = await response.json();
-      const promodcod = document.getElementById('popupProdutoModalModelo');
-      promodcod.innerHTML = '<option value="">Selecione</option>';
-      modelos.forEach(modelo => {
-        const option = document.createElement('option');
-        option.value = modelo.modcod;
-        option.textContent = modelo.moddes;
-        promodcod.appendChild(option);
-      });
+      const modelosContainer = document.getElementById('popupProdutoModalModelosContainer');
+      modelosContainer.innerHTML = '';
+      
+      if (modelos.length === 0) {
+        modelosContainer.innerHTML = '<p class="text-muted">Nenhum modelo disponível para esta marca</p>';
+      } else {
+        modelos.forEach(modelo => {
+          const div = document.createElement('div');
+          div.className = 'form-check';
+          div.innerHTML = `
+            <input class="form-check-input" type="checkbox" name="promodcod" value="${modelo.modcod}" id="modelo_${modelo.modcod}">
+            <label class="form-check-label" for="modelo_${modelo.modcod}">${modelo.moddes}</label>
+          `;
+          modelosContainer.appendChild(div);
+        });
+      }
     } catch (error) {
       console.error('Erro ao carregar modelos:', error);
     }
@@ -45,11 +53,11 @@ btnProduto.addEventListener('click', () => {
 
   promarcascod.addEventListener('change', (e) => {
     const marcascod = e.target.value;
-    const promodcod = document.getElementById('popupMarcaModalProduto');
+    const modelosContainer = document.getElementById('popupProdutoModalModelosContainer');
     if (marcascod) {
       fetchModelos(marcascod);
     } else {
-      promodcod.innerHTML = '<option value="">Selecione</option>';
+      modelosContainer.innerHTML = '';
     }
   });
 
@@ -103,6 +111,12 @@ btnProduto.addEventListener('click', () => {
   fetchMarcas();
   fetchTipos();
   
+  // Clear model checkboxes when opening modal
+  const modelosContainer = document.getElementById('popupProdutoModalModelosContainer');
+  if (modelosContainer) {
+    modelosContainer.innerHTML = '';
+  }
+  
   descricaoProduto.value = '';
   provl.value = '';
   produtoModal.show();
@@ -112,11 +126,24 @@ btnProduto.addEventListener('click', () => {
 // salvar registro na api
 produtoForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
+  
+  // Collect selected models
+  const modelCheckboxes = document.querySelectorAll(
+    '#popupProdutoModalModelosContainer input[type="checkbox"]:checked'
+  );
+  const modelIds = Array.from(modelCheckboxes).map((cb) => parseInt(cb.value));
+  
+  if (modelIds.length === 0) {
+    alert('Por favor, selecione pelo menos um modelo.');
+    return;
+  }
+  
   const payload = {
     prodes: descricaoProduto.value.trim(),
     promarcascod: parseInt(document.getElementById('popupMarcaModalProduto').value),
     provl: parseFloat(provl.value),
-    promodcod: parseInt(document.getElementById('popupProdutoModalModelo').value),
+    promodcods: modelIds,
+    promodcod: modelIds.length > 0 ? modelIds[0] : null, // For backward compatibility
     protipocod: parseInt(document.getElementById('popupProdutoModaltipo').value)
   };
 

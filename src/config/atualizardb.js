@@ -56,6 +56,26 @@ async function atualizarDB() {
     );
     await pool.query(`ALTER TABLE public.pv ADD if not exists pvdtcad date DEFAULT now() NOT NULL;
 `)
+    
+    // Table PRO_MODELO (many-to-many junction table for products and models)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS public.pro_modelo (
+          procod int4 NOT NULL,
+          modcod int4 NOT NULL,
+          CONSTRAINT pro_modelo_pkey PRIMARY KEY (procod, modcod),
+          CONSTRAINT pro_modelo_procod_fkey FOREIGN KEY (procod) REFERENCES public.pro(procod) ON DELETE CASCADE,
+          CONSTRAINT pro_modelo_modcod_fkey FOREIGN KEY (modcod) REFERENCES public.modelo(modcod) ON DELETE CASCADE
+        );
+    `);
+    
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_pro_modelo_procod ON public.pro_modelo (procod);
+    `);
+    
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_pro_modelo_modcod ON public.pro_modelo (modcod);
+    `);
+    
     // FIM NOVOS CAMPOS
     // ==================================================================================================================================
 
